@@ -24,10 +24,7 @@ if "paciente_actual" not in st.session_state:
 
 if "historiales_pacientes" not in st.session_state:
     st.session_state.historiales_pacientes = {
-        "Wilber (23 años)": "Hola Wilber, ¿en qué te puedo ayudar hoy?",
-        "Luis (5 años)": "Hola mi corazón, ¿qué recetita o medicina vamos a revisar hoy?",
-        "María (30 años)": "Hola María, dime qué medicamento deseas consultar hoy.",
-        "Rosa (65 años)": "Hola doña Rosa, dígame qué medicina le han prescrito para revisarla con paciencia."
+      
     }
 
 if "imagen_bytes" not in st.session_state:
