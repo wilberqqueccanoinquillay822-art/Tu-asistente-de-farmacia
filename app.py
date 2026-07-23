@@ -1,132 +1,165 @@
 import streamlit as st
+import base64
 from groq import Groq
-from gtts import gTTS
-import os
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
+# --- CONFIGURACIÓN DE LA PÁGINA WEB ---
 st.set_page_config(
-    page_title="Tu Asistente de Farmacia",
+    page_title="Tu asistente de farmacia",
     page_icon="💊",
     layout="centered"
 )
 
-# --- ESTILOS CSS PERSONALIZADOS ---
-st.markdown("""
-    <style>
-    .main-title {
-        font-size: 2.2rem;
-        color: #2c3e50;
-        font-weight: 700;
-        margin-bottom: 0px;
-    }
-    .subtitle {
-        color: #7f8c8d;
-        font-size: 1rem;
-        margin-bottom: 20px;
-    }
-    .stButton>button {
-        background-color: #3498db;
-        color: white;
-        border-radius: 8px;
-        font-weight: bold;
-        border: none;
-        padding: 0.5rem 1rem;
-    }
-    .stButton>button:hover {
-        background-color: #2980b9;
-        color: white;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# --- CLAVE DE API INTEGRADA (GROQ) ---
+CLAVE_API = "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"
 
-# --- CONFIGURACIÓN DE LA API DE GROQ (Compatible local y web) ---
+# Inicializar cliente de Groq
 try:
-    api_key = st.secrets["GROQ_API_KEY"]
-except Exception:
-    api_key = "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"  # Tu clave real para desarrollo local
+    client = Groq(api_key=CLAVE_API)
+except Exception as e:
+    client = None
 
-client = Groq(api_key=api_key)
+# --- ESTADOS DE LA SESIÓN (MEMORIA DE LA WEB) ---
+if "paciente_actual" not in st.session_state:
+    st.session_state.paciente_actual = "Luis (5 años)"
 
-# --- GESTIÓN DE PACIENTES EN LA BARRA LATERAL ---
-st.sidebar.markdown("### 👥 Mis Pacientes")
+if "historiales_pacientes" not in st.session_state:
+    st.session_state.historiales_pacientes = {
+        "Wilber (23 años)": "Hola Wilber, ¿en qué te puedo ayudar hoy?",
+        "Luis (5 años)": "Hola mi corazón, ¿qué recetita o medicina vamos a revisar hoy?",
+        "María (30 años)": "Hola María, dime qué medicamento deseas consultar hoy.",
+        "Rosa (65 años)": "Hola doña Rosa, dígame qué medicina le han prescrito para revisarla con paciencia."
+    }
 
-# Inicializar lista de pacientes si no existe
-if "patients" not in st.session_state:
-    st.session_state.patients = [{"name": "Luis", "age": 5}]
+if "imagen_bytes" not in st.session_state:
+    st.session_state.imagen_bytes = None
 
-# Formulario para agregar paciente en la barra lateral
-with st.sidebar.form("add_patient_form", clear_on_submit=True):
-    new_name = st.text_input("Nombre del paciente:")
-    new_age = st.number_input("Edad (solo número):", min_value=0, max_value=120, value=0)
-    submitted = st.form_submit_button("Guardar paciente")
+# --- DISEÑO DE LA INTERFAZ WEB ---
+st.title("💊 Tu asistente de farmacia")
+st.markdown("---")
+
+# Barra lateral para pacientes y opciones
+with st.sidebar:
+    st.header("👥 Mis pacientes")
     
-    if submitted and new_name:
-        st.session_state.patients.append({"name": new_name, "age": int(new_age)})
-        st.sidebar.success(f"¡Paciente {new_name} agregado!")
+    # Selector de paciente actual
+    lista_nombres = list(st.session_state.historiales_pacientes.keys())
+    indice_actual = lista_nombres.index(st.session_state.paciente_actual) if st.session_state.paciente_actual in lista_nombres else 0
+    
+    paciente_seleccionado = st.selectbox("Selecciona paciente:", lista_nombres, index=indice_actual)
+    if paciente_seleccionado != st.session_state.paciente_actual:
+        st.session_state.paciente_actual = paciente_seleccionado
+        st.rerun()
 
-# Selector de paciente actual
-patient_names = [f"{p['name']} ({p['age']} años)" for p in st.session_state.patients]
-selected_patient_str = st.sidebar.selectbox("Selecciona paciente:", patient_names)
+    st.markdown("---")
+    st.subheader("➕ Agregar paciente")
+    nuevo_nombre = st.text_input("Nombre del paciente:")
+    nueva_edad = st.text_input("Edad (solo número):")
+    
+    if st.button("Guardar paciente"):
+        if nuevo_nombre.strip() and nueva_edad.strip():
+            edad_limpia = ''.join(filter(str.isdigit, nueva_edad.strip()))
+            if not edad_limpia:
+                edad_limpia = nueva_edad.strip()
+            
+            clave_p = f"{nuevo_nombre.strip()} ({edad_limpia} años)"
+            st.session_state.historiales_pacientes[clave_p] = f"Hola {nuevo_nombre.strip()}, ¿qué medicamento vamos a consultar hoy?"
+            st.session_state.paciente_actual = clave_p
+            st.success(f"¡Paciente {clave_p} agregado!")
+            st.rerun()
 
-# Extraer el paciente activo
-selected_index = patient_names.index(selected_patient_str)
-current_patient = st.session_state.patients[selected_index]
+    st.markdown("---")
+    st.subheader("🖼️ Subir imagen / Foto")
+    archivo_subido = st.file_uploader("Sube la foto del medicamento", type=["png", "jpg", "jpeg"])
+    if archivo_subido is not None:
+        st.session_state.imagen_bytes = archivo_subido.getvalue()
+        st.image(st.session_state.imagen_bytes, caption="Imagen cargada", use_column_width=True)
+        if st.button("🗑️ Quitar imagen"):
+            st.session_state.imagen_bytes = None
+            st.rerun()
 
-# --- CUERPO PRINCIPAL DE LA APLICACIÓN ---
-st.markdown('<p class="main-title">💊 Tu asistente de farmacia</p>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Asesoría farmacéutica inteligente y segura</p>', unsafe_allow_html=True)
-st.divider()
+# --- ÁREA PRINCIPAL DE CHAT Y CONSULTA ---
+st.info(f"👦 **Paciente actual:** {st.session_state.paciente_actual}")
 
-# Mostrar paciente actual seleccionado
-st.info(f"👤 **Paciente actual:** {current_patient['name']} ({current_patient['age']} años)")
+# Mostrar respuesta guardada del paciente actual
+respuesta_actual = st.session_state.historiales_pacientes.get(st.session_state.paciente_actual, "")
 
-# Entrada de la consulta del usuario
-st.markdown("### 🤖 Respuesta de la IA")
-user_query = st.text_area(
-    "Escribe tu pregunta sobre el medicamento aquí:", 
-    placeholder="Ejemplo: ¿Para qué sirve y cuál es la dosis correcta?"
-)
+st.markdown("### ✨ Respuesta de la IA")
+st.markdown(f"<div style='background-color: #F8FAFC; padding: 15px; border-radius: 10px; border: 1px solid #E2E8F0;'>{respuesta_actual}</div>", unsafe_allow_html=True)
 
-# Botón para enviar consulta
-if st.button("Enviar consulta ➔"):
-    if not user_query.strip():
-        st.warning("Por favor, escribe una pregunta antes de enviar.")
+st.markdown("---")
+
+# Cuadro de texto inferior para preguntar
+pregunta_usuario = st.text_input("Escribe tu pregunta sobre el medicamento aquí...", placeholder="Ejemplo: ¿Para qué sirve y cuál es la dosis?")
+
+if st.button("Enviar consulta ➔", type="primary"):
+    if not client:
+        st.error("⚠️ Error: La API Key de Groq no se inicializó correctamente.")
+    elif not pregunta_usuario.strip() and not st.session_state.imagen_bytes:
+        st.warning("⚠️ Por favor escribe una pregunta o sube una imagen primero.")
     else:
-        with st.spinner("Analizando consulta farmacéutica..."):
+        with st.spinner("⏳ Consultando a Groq IA..."):
             try:
-                # Prompt del sistema adaptado al paciente
-                system_prompt = (
-                    f"Eres un asistente de farmacia experto y profesional. "
-                    f"Estás atendiendo al paciente {current_patient['name']}, quien tiene {current_patient['age']} años. "
-                    f"Proporciona información clara sobre medicamentos, indicaciones y dosis seguras basadas estrictamente en su edad. "
-                    f"Si es un niño, advierte consultar siempre a un pediatra."
+                bytes_img = st.session_state.imagen_bytes
+                
+                instruccion_idioma = (
+                    "IMPORTANTE: Responde SIEMPRE 100% en ESPAÑOL PERUANO natural, claro y como una persona real conversando de frente.\n"
+                    f"Actúa como un farmacéutico/enfermero peruano muy humano, cercano y empático que asesora al paciente: {st.session_state.paciente_actual}.\n\n"
+                    "REGLAS DE FORMATO Y TÍTULOS:\n"
+                    "- Usa etiquetas HTML claras en los títulos principales (ejemplo: <h3><b>1. Nombre del medicamento y presentación</b></h3>) para que se vean perfectamente definidos.\n"
+                    "- Usa viñetas limpias para los detalles.\n\n"
+                    "REGLAS DE TONO Y CARIÑO SEGÚN EDAD PARA EL 'RESUMEN_VOZ':\n"
+                    "- ÚNICAMENTE si el paciente es un NIÑO o BEBÉ (menor de 12 años): Háblale con mucha ternura usando frases como 'mi corazón', 'mi vida' o 'campeón'.\n"
+                    "- Si el paciente es un JOVEN o ADULTO (ej. 12 a 59 años): JAMÁS uses expresiones como 'mi corazón' o 'mi vida'. Háblale con mucha amabilidad y respeto profesional.\n"
+                    "- Si es un ADULTO MAYOR (60+ años): Háblale con respeto, calidez y mucha paciencia.\n\n"
+                    "Sigue ESTRICTAMENTE esta estructura con títulos detallados:\n\n"
+                    "<h3><b>1. 💊 Nombre del medicamento y presentación</b></h3>\n"
+                    " * Nombre comercial y genérico: [Nombre del medicamento]\n"
+                    " * Presentación: [Jarabe, tabletas, gotas, etc.]\n"
+                    " * Componentes activos principales: [Principios activos y concentración]\n"
+                    " * Promedio de precio en Perú: [Estimado aproximado en Soles peruanos (S/.)]\n\n"
+                    "<h3><b>2. 🎯 Usos principales</b></h3>\n"
+                    " * Indicación principal: [Para qué sirve específicamente]\n"
+                    " * Síntomas que alivia: [Detalle de los síntomas]\n"
+                    " * Acción terapéutica: [Cómo ayuda al cuerpo]\n\n"
+                    "<h3><b>3. ⏰ Cuándo tomar</b></h3>\n"
+                    " * Dosis recomendada: [Dosis sugerida según la edad del paciente]\n"
+                    " * Frecuencia y horarios: [Cada cuántas horas y con o sin alimentos]\n"
+                    " * Duración habitual del tratamiento: [Días aproximados]\n\n"
+                    "<h3><b>4. ⚠️ Cuándo NO tomar</b></h3>\n"
+                    " * Contraindicaciones y alergias: [Cuándo evitarlo totalmente]\n"
+                    " * Advertencias y precauciones: [Cuidado con otras condiciones o medicamentos]\n"
+                    " * Efectos secundarios comunes: [Reacciones leves posibles]\n"
                 )
+                
+                if pregunta_usuario.strip():
+                    instruccion_idioma += f"\nConsulta del usuario: {pregunta_usuario}\n"
+                else:
+                    instruccion_idioma += "\nDescribe y analiza detenidamente lo que ves en la imagen adjunta.\n"
 
-                # Llamada a la API de Groq
-                chat_completion = client.chat.completions.create(
+                if bytes_img:
+                    modelo_usar = "qwen/qwen3.6-27b"
+                    base64_image = base64.b64encode(bytes_img).decode('utf-8')
+                    contenido = [
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
+                        {"type": "text", "text": instruccion_idioma}
+                    ]
+                else:
+                    modelo_usar = "llama-3.3-70b-versatile"
+                    contenido = instruccion_idioma
+
+                response = client.chat.completions.create(
+                    model=modelo_usar,
                     messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_query}
+                        {"role": "system", "content": "Eres un asistente médico y farmacéutico peruano, empático y humano."},
+                        {"role": "user", "content": contenido}
                     ],
-                    model="llama-3.3-70b-versatile",
+                    max_tokens=2048
                 )
-
-                respuesta_ia = chat_completion.choices[0].message.content
-
-                # Mostrar texto de la respuesta
-                st.markdown("---")
-                st.write(respuesta_ia)
-
-                # --- MÓDULO DE VOZ (gTTS) ---
-                try:
-                    tts = gTTS(text=respuesta_ia, lang='es')
-                    audio_path = "respuesta_audio.mp3"
-                    tts.save(audio_path)
-                    
-                    # Reproducir audio automáticamente en la web
-                    st.audio(audio_path, format="audio/mp3", autoplay=True)
-                except Exception as audio_error:
-                    st.error(f"No se pudo generar el audio: {audio_error}")
-
+                
+                respuesta_texto = response.choices[0].message.content or ""
+                st.session_state.historiales_pacientes[st.session_state.paciente_actual] = respuesta_texto
+                st.success("¡Consulta completada con éxito!")
+                st.rerun()
+                
             except Exception as e:
-                st.error(f"Ocurrió un error al conectar con la Inteligencia Artificial: {e}")
+                st.error(f"❌ Error al consultar a Groq: {e}")
