@@ -39,9 +39,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- CONFIGURACIÓN DE LA API DE GROQ ---
-# Nota: Asegúrate de configurar tu API Key en los Secrets de Streamlit Cloud o reemplazarla aquí temporalmente
-api_key = st.secrets.get("GROQ_API_KEY", "TU_API_KEY_AQUI")
+# --- CONFIGURACIÓN DE LA API DE GROQ (Compatible local y web) ---
+try:
+    api_key = st.secrets["GROQ_API_KEY"]
+except Exception:
+    api_key = "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"  # Tu clave real para desarrollo local
+
 client = Groq(api_key=api_key)
 
 # --- GESTIÓN DE PACIENTES EN LA BARRA LATERAL ---
@@ -105,7 +108,7 @@ if st.button("Enviar consulta ➔"):
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_query}
                     ],
-                    model="llama-3.3-70b-versatile", # Puedes cambiar al modelo de tu preferencia
+                    model="llama-3.3-70b-versatile",
                 )
 
                 respuesta_ia = chat_completion.choices[0].message.content
